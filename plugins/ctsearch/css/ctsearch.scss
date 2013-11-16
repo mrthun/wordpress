@@ -1,0 +1,63 @@
+#jobamatic-search-form {
+  
+  #jobamatic-advanced-options-wrap {
+    display: none;
+    
+    & > div {
+      margin: 6px 0;
+    }
+  }
+  
+}
+
+#jobamatic-wrap {
+  margin-top: 24px;
+  position: relative;
+  
+  .loading {
+    background: transparent url(../img/loading.gif) 0 0 no-repeat;
+    min-height: 32px;
+    padding-left: 36px;
+  }
+}
+
+#jobamatic-content .jobamatic-job {
+  padding: 8px 16px;
+  margin-top: 8px;
+  
+  &:nth-child(odd) {
+    background: #E2E2E2;
+  }
+  
+  h3.job-title {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    text-transform: capitalize;
+    line-height: 1.5em;
+  }
+  
+  
+  .more > a {
+    display: block;
+    float: right;
+    margin-right: 8px;
+    width: auto;
+    padding: 8px 4px;
+  }
+  
+  .label {
+    font-weight: bold;
+    font-style: italic;
+  }
+  
+}
+
+#jobamatic-pager {
+  margin: 12px 0 0 4px;
+}
+
+#jobamatic-attribution {
+  margin-top: 18px;
+}
