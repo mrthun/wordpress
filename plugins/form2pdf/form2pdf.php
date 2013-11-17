@@ -26,6 +26,7 @@
      * along with this program; if not, write to the Free Software
      * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
      */
+     
     
     
     if(!class_exists('Form2pdf')) {
@@ -46,18 +47,23 @@
                 
 				$this->debug_add('PATH',$this->plugin_dir . 'includes/form2pdf-options.php');
                 
-                if(is_admin()) {
+          //      if(is_admin()) {
                     add_action('admin_init', array($this, 'register_settings'));
                     add_action('admin_menu', array($this, 'options_page'));
-                } else {
+        //        } else {
                     add_action('wp_footer', array($this,'ct_debug'));
 					add_action( 'init', array($this,'ninja_forms_create_pdf_init') );
-                }
+					
+
+
+          //      }
             }
 			
 			
 			function ninja_forms_create_pdf_init(){
     			add_action( 'ninja_forms_before_pre_process', array($this,'ninja_forms_create_pdf' ));
+				
+				
 			}
  
 	function ninja_forms_create_pdf(){
@@ -67,12 +73,11 @@
 		$field_results = ninja_forms_get_fields_by_form_id($form_id);
 		$options = $this->get_options();
 		$file_name='';
-
-		// $this->debug_add('USER SUBMISSION',$field_results);
 	
-		if($options['form_id']==$form_id && $options['convert']==true && is_array( $field_results ) AND !empty( $field_results )) {
+		if($options['template'] !=='' && $options['form_id']==$form_id && $options['convert']==true && is_array( $field_results ) AND !empty( $field_results )) {
 					
-					
+			$this->debug_add('AJAX SUBMIT','test');
+			
 			// Create first part of filename
 			$form_row = ninja_forms_get_form_by_id( $form_id );
 			$form_data = $form_row['data'];
@@ -83,6 +88,15 @@
 			}
 			// no spaces
 			$file_name = str_replace(' ','_',$form_title);
+			
+			// get the template			
+			if (is_readable($this->templateurl . $options['template'])) {
+				$file = fopen($this->templateurl . $options['template'], "r");
+				$template = fread($file, filesize($this->templateurl . $options['template']));
+				fclose($file);
+			} else {
+				$this->debug_add('FILE NOT READABLE', $this->templateurl . $options['template']);
+			}			
 	
 			// cycle through the submission and do the magic
 			foreach( $field_results as $field ){
@@ -99,9 +113,15 @@
 						$arguments['field_id'] = $field_id;
 						$user_value = $ninja_forms_processing->get_field_value( $field_id );
 						$user_value = apply_filters( 'ninja_forms_field_pre_process_user_value', $user_value, $field_id );
-						array_push($this->debug_out,array('FIELD',$user_value));
+						// $this->debug_add('FIELD',$user_value);
 						$arguments['user_value'] = $user_value;
 						call_user_func_array($pre_process_function, $arguments);
+						
+						// Replace all value-tags for this field in the template
+						$template = str_replace('%v:' . $field_id . '%',$user_value,$template);
+						// Replace all label-tags for this field in the template
+						$template = str_replace('%l:' . $field_id . '%',$field_data['label'],$template);
+						
 						
 						// If there was a field set with content to be added to the file name then add it now
 						if ($options['name_field'] == $field_id) {
@@ -109,25 +129,32 @@
 						}
 						// Either update the filename or the url_field contents depending on settings
 						if ($options['url_field'] == $field_id) {
-							if ($options['store_versions'] == 0) {
+							if ($options['store_versions'] == 0 && $user_value !=='' && !(empty($user_value))) {
 								// we don't store versions so we  reuse the existing filename
 								$file_name = $user_value;
 							} else {
 								// create the new filename and update the field
 								// Add the timestamp to the filename -  only if there is a filename of course
 								$date = new DateTime();
-								$file_name .= $date->getTimestamp();
-								
+								$file_name .= $date->getTimestamp() . '.pdf';
 								// Now update the field in the submission
-								// But how do we do that???
-								// Check get_field_value() in class-ninja-forms-processing.php for details
-								if(!empty($this->data) && $field_ID !== '' && isset($this->data['fields'][$field_ID])){
-									$this->data['fields'][$field_ID] = $file_name;
-								}
+								$ninja_forms_processing->update_field_value($field_id, "wp-content/plugins/form2pdf/pdf/" . $file_name);
+							
 							}							
 						}					
 					}				
 				}
+			}
+			require_once($this->plugin_dir . "includes/dompdf/dompdf_config.inc.php");
+			
+			// Create the PDF
+			if ($file_name !== '' &&	 $template !== '') {
+				$dompdf = new DOMPDF();
+				$dompdf->load_html($template);
+				$dompdf->render();
+				$output = $dompdf->output();		
+				file_put_contents($this->pdfurl . $file_name, $output);
+
 			}
 		}
 	}
@@ -162,6 +189,7 @@
                                  'store_versions' => 0,
                                  'name_field' => '',
                                  'url_field' => '',
+                                 'template' => '',
                                  );
                 $saved = get_option($this->db_opt);
                 if(!empty($saved)) {
@@ -224,6 +252,14 @@
                                    'form2pdf',
                                    'form_settings'
                                    );
+				add_settings_field(
+                                   'template_field',
+                                   'Template Filename',
+                                   array($this, 'template_field_input'),
+                                   'form2pdf',
+                                   'form_settings'
+                                   );
+                
                 
                 
 
@@ -283,12 +319,17 @@
                 
                 echo '<input type="text" id="name_field" name="' . $this->db_opt . '[name_field]" value="' . $options['name_field'] . '" size="25" />';
             }
-            
+             function template_field_input() {
+                $options = $this->get_options();
+                
+                echo '<input type="text" id="template_field" name="' . $this->db_opt . '[template]" value="' . $options['template'] . '" size="25" />';
+            }           
 
 
             function validate_options($input) {
                 $valid['debug'] = intval($input['debug']);
                 $valid['convert'] = intval($input['convert']);
+                $valid['template'] = $input['template'];
                 
                 // TO BE FIXED!!!!
                 $valid['url_field'] = $input['url_field'];
@@ -310,12 +351,12 @@
             
     }
 
+
     $Form2pdf = new Form2pdf();
     
-    if($Form2pdf) {
+    if($Form2pdf) {  	
         register_activation_hook( __FILE__, array(&$Form2pdf, 'install'));
         // Adds an ajax actions.
-
     }
     
 ?>
